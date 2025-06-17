@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TutorConnect - Free Tutoring Opportunities</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+            margin-bottom: 2rem;
+            border-radius: 10px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .post-form {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #555;
+        }
+
+        input, select, textarea {
+            padding: 0.75rem;
+            border: 2px solid #e1e5e9;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .post-type {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .post-type label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-weight: normal;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        .filters {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .filter-btn.active, .filter-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .posts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .post {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .post:hover {
+            transform: translateY(-5px);
+        }
+
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .post-type-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .seeking {
+            background: #fef3e2;
+            color: #d97706;
+        }
+
+        .offering {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .post-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .post-details {
+            color: #666;
+            margin-bottom: 1rem;
+        }
+
+        .post-details div {
+            margin-bottom: 0.25rem;
+        }
+
+        .post-description {
+            color: #555;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+
+        .contact-btn {
+            background: #10b981;
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .contact-btn:hover {
+            background: #059669;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .filters {
+                justify-content: center;
+            }
+            
+            header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>TutorConnect</h1>
+            <p>Connect tutors and students - completely free!</p>
+        </header>
+
+        <div class="post-form">
+            <h2>Post a Tutoring Opportunity</h2>
+            <form id="tutorForm">
+                <div class="post-type">
+                    <label>
+                        <input type="radio" name="postType" value="seeking" checked>
+                        Looking for a Tutor
+                    </label>
+                    <label>
+                        <input type="radio" name="postType" value="offering">
+                        Offering Tutoring Services
+                    </label>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="name">Your Name</label>
+                        <input type="text" id="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="subject">Subject</label>
+                        <input type="text" id="subject" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="level">Level</label>
+                        <select id="level" required>
+                            <option value="">Select level</option>
+                            <option value="elementary">Elementary</option>
+                            <option value="middle">Middle School</option>
+                            <option value="high">High School</option>
+                            <option value="college">College</option>
+                            <option value="adult">Adult Education</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="format">Format</label>
+                        <select id="format" required>
+                            <option value="">Select format</option>
+                            <option value="online">Online</option>
+                            <option value="in-person">In Person</option>
+                            <option value="both">Both</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="description">Description</label>
+                        <textarea id="description" placeholder="Describe what you're looking for or what you can offer..." required></textarea>
+                    </div>
+                </div>
+                <button type="submit">Post Opportunity</button>
+            </form>
+        </div>
+
+        <div class="filters">
+            <div class="filter-btn active" data-filter="all">All Posts</div>
+            <div class="filter-btn" data-filter="seeking">Looking for Tutors</div>
+            <div class="filter-btn" data-filter="offering">Offering Services</div>
+        </div>
+
+        <div class="posts-container" id="postsContainer">
+            <!-- Sample posts -->
+            <div class="post" data-type="seeking">
+                <div class="post-header">
+                    <div class="post-type-badge seeking">Looking for Tutor</div>
+                    <small>Posted 2 hours ago</small>
+                </div>
+                <div class="post-title">Need help with Calculus</div>
+                <div class="post-details">
+                    <div><strong>Subject:</strong> Mathematics - Calculus</div>
+                    <div><strong>Level:</strong> College</div>
+                    <div><strong>Location:</strong> San Francisco, CA</div>
+                    <div><strong>Format:</strong> Online preferred</div>
+                </div>
+                <div class="post-description">
+                    Looking for an experienced tutor to help with Calculus I. Struggling with limits and derivatives. Flexible schedule, prefer evening sessions.
+                </div>
+                <button class="contact-btn">Contact Student</button>
+            </div>
+
+            <div class="post" data-type="offering">
+                <div class="post-header">
+                    <div class="post-type-badge offering">Offering Services</div>
+                    <small>Posted 5 hours ago</small>
+                </div>
+                <div class="post-title">Math & Physics Tutor Available</div>
+                <div class="post-details">
+                    <div><strong>Subjects:</strong> Math, Physics</div>
+                    <div><strong>Levels:</strong> High School, College</div>
+                    <div><strong>Location:</strong> New York, NY</div>
+                    <div><strong>Format:</strong> Both online and in-person</div>
+                </div>
+                <div class="post-description">
+                    PhD in Physics with 5 years tutoring experience. Specializing in algebra, calculus, and physics. Free consultation available!
+                </div>
+                <button class="contact-btn">Contact Tutor</button>
+            </div>
+
+            <div class="post" data-type="seeking">
+                <div class="post-header">
+                    <div class="post-type-badge seeking">Looking for Tutor</div>
+                    <small>Posted 1 day ago</small>
+                </div>
+                <div class="post-title">Spanish conversation practice needed</div>
+                <div class="post-details">
+                    <div><strong>Subject:</strong> Spanish Language</div>
+                    <div><strong>Level:</strong> Adult Education</div>
+                    <div><strong>Location:</strong> Austin, TX</div>
+                    <div><strong>Format:</strong> Online</div>
+                </div>
+                <div class="post-description">
+                    Looking for a native Spanish speaker for conversation practice. I'm intermediate level and want to improve fluency.
+                </div>
+                <button class="contact-btn">Contact Student</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Form submission
+        document.getElementById('tutorForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const postType = formData.get('postType');
+            const name = formData.get('name') || document.getElementById('name').value;
+            const email = formData.get('email') || document.getElementById('email').value;
+            const subject = document.getElementById('subject').value;
+            const level = document.getElementById('level').value;
+            const location = document.getElementById('location').value;
+            const format = document.getElementById('format').value;
+            const description = document.getElementById('description').value;
+
+            // Create new post
+            const post = document.createElement('div');
+            post.className = 'post';
+            post.setAttribute('data-type', postType);
+            
+            const badgeClass = postType === 'seeking' ? 'seeking' : 'offering';
+            const badgeText = postType === 'seeking' ? 'Looking for Tutor' : 'Offering Services';
+            const buttonText = postType === 'seeking' ? 'Contact Student' : 'Contact Tutor';
+            
+            post.innerHTML = `
+                <div class="post-header">
+                    <div class="post-type-badge ${badgeClass}">${badgeText}</div>
+                    <small>Posted just now</small>
+                </div>
+                <div class="post-title">${subject} - ${level}</div>
+                <div class="post-details">
+                    <div><strong>Subject:</strong> ${subject}</div>
+                    <div><strong>Level:</strong> ${level}</div>
+                    <div><strong>Location:</strong> ${location}</div>
+                    <div><strong>Format:</strong> ${format}</div>
+                    <div><strong>Contact:</strong> ${name}</div>
+                </div>
+                <div class="post-description">${description}</div>
+                <button class="contact-btn" onclick="window.location.href='mailto:${email}'">${buttonText}</button>
+            `;
+
+            // Add to posts container
+            document.getElementById('postsContainer').prepend(post);
+            
+            // Reset form
+            this.reset();
+            alert('Your post has been added successfully!');
+        });
+
+        // Filter functionality
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Update active filter
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                const filter = this.getAttribute('data-filter');
+                const posts = document.querySelectorAll('.post');
+                
+                posts.forEach(post => {
+                    if (filter === 'all' || post.getAttribute('data-type') === filter) {
+                        post.style.display = 'block';
+                    } else {
+                        post.style.display = 'none';
+                    }
+                });
+            });
+        });
+
+        // Add contact functionality to existing posts
+        document.querySelectorAll('.contact-btn').forEach(btn => {
+            if (!btn.onclick) {
+                btn.addEventListener('click', function() {
+                    alert('Contact functionality would be implemented here. In a real application, this would open a contact form or show contact details.');
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+
