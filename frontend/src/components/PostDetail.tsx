@@ -35,6 +35,7 @@ import {
   Sms as SmsIcon,
   ContentCopy as ContentCopyIcon,
   Phone as PhoneIcon,
+  Message as MessageIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import axios from 'axios';
@@ -55,11 +56,14 @@ interface Post {
   post_type: 'seeking' | 'offering';
   name: string;
   email: string;
+  contact_email?: string;
+  contact_phone?: string;
   subject: string;
   level: string;
   location: string;
   format: string;
   description: string;
+  image_urls?: string[];
   created_at: string;
   coordinates?: [number, number];
 }
@@ -117,19 +121,46 @@ const PostDetail = () => {
   };
 
   const geocodeLocation = async (location: string) => {
+    console.log(`📍 PostDetail: Geocoding location: ${location}`);
     setMapLoading(true);
+    
     try {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.log(`📍 PostDetail: Geocoding timeout for ${location}`);
+        controller.abort();
+      }, 5000);
+
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`
+        `http://localhost:3001/api/geocode?location=${encodeURIComponent(location)}`,
+        {
+          signal: controller.signal
+        }
       );
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
+      console.log(`📍 PostDetail: Geocoding response for ${location}:`, data);
       
       if (data && data.length > 0) {
         const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        console.log(`📍 PostDetail: Successfully geocoded ${location}:`, coords);
         setCoordinates(coords);
+      } else {
+        console.log(`📍 PostDetail: No results found for ${location}`);
+        // Set a default coordinate so map still shows something
+        setCoordinates([37.7749, -122.4194]); // San Francisco default
       }
     } catch (error) {
-      console.error('Geocoding error:', error);
+      console.error(`📍 PostDetail: Geocoding error for ${location}:`, error);
+      // Set a default coordinate so map still shows something
+      setCoordinates([37.7749, -122.4194]); // San Francisco default
     } finally {
       setMapLoading(false);
     }
@@ -217,17 +248,27 @@ const PostDetail = () => {
 
   const handleEmailContact = () => {
     if (!post) return;
-    const mailtoLink = `mailto:${post.email}?subject=${encodeURIComponent(`Re: ${post.subject} Tutoring`)}&body=${encodeURIComponent(`Hi ${post.name},\n\nI'm interested in your ${post.subject} tutoring post. Let's discuss!\n\nBest regards`)}`;
+    if (!post.contact_email) {
+      setSnackbarMessage('Email not provided for this post.');
+      setSnackbarOpen(true);
+      return;
+    }
+    const p = post!;
+    const mailtoLink = `mailto:${p.contact_email}?subject=${encodeURIComponent(`Re: ${p.subject} Tutoring`)}&body=${encodeURIComponent(`Hi ${p.name},\n\nI'm interested in your ${p.subject} tutoring post. Let's discuss!\n\nBest regards`)}`;
     window.location.href = mailtoLink;
     handleContactClose();
   };
 
   const handleSmsContact = () => {
     if (!post) return;
-    // Note: SMS requires phone number, but we only have email
-    // This is a placeholder - you might want to add phone field to your database
-    const smsText = `Hi ${post.name}, I'm interested in your ${post.subject} tutoring post. Let's discuss!`;
-    const smsLink = `sms:?body=${encodeURIComponent(smsText)}`;
+    if (!post.contact_phone) {
+      setSnackbarMessage('Phone number not provided for this post.');
+      setSnackbarOpen(true);
+      return;
+    }
+    const p = post!;
+    const smsText = `Hi ${p.name}, I'm interested in your ${p.subject} tutoring post. Let's discuss!`;
+    const smsLink = `sms:${p.contact_phone}?body=${encodeURIComponent(smsText)}`;
     window.location.href = smsLink;
     handleContactClose();
     setSnackbarMessage('SMS template copied. Add recipient phone number.');
@@ -237,13 +278,15 @@ const PostDetail = () => {
   const handleCopyEmail = async () => {
     if (!post) return;
     try {
-      await navigator.clipboard.writeText(post.email);
+      const p = post!;
+      await navigator.clipboard.writeText(p.contact_email || '');
       setSnackbarMessage('Email address copied to clipboard!');
       setSnackbarOpen(true);
     } catch (err) {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
-      textArea.value = post.email;
+      const p = post!;
+      textArea.value = p.contact_email || '';
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand('copy');
@@ -260,6 +303,19 @@ const PostDetail = () => {
     // This is a placeholder
     setSnackbarMessage('Phone number not available. Try email instead.');
     setSnackbarOpen(true);
+    handleContactClose();
+  };
+
+  const handleSiteMessage = async () => {
+    if (!post) return;
+    // TODO require auth check on site; assume user must login elsewhere
+    try {
+      await axios.post('http://localhost:3001/api/conversations', {
+        participant_id: post.id,
+        post_id: post.id,
+      });
+      navigate('/messages');
+    } catch(err){console.error(err);} 
     handleContactClose();
   };
 
@@ -472,6 +528,53 @@ const PostDetail = () => {
                 >
                   {post.description}
                 </Typography>
+
+                {/* Post Images */}
+                {post.image_urls && post.image_urls.length > 0 && (
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600, color: '#667eea' }}>
+                      Images
+                    </Typography>
+                    <Box sx={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+                      gap: 2 
+                    }}>
+                      {post.image_urls.map((imageUrl, index) => (
+                        <Box
+                          key={index}
+                          sx={{
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            aspectRatio: '16/9',
+                            position: 'relative',
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s ease',
+                            '&:hover': {
+                              transform: 'scale(1.02)',
+                            },
+                          }}
+                          onClick={() => window.open(imageUrl, '_blank')}
+                        >
+                          <img
+                            src={imageUrl}
+                            alt={`Post image ${index + 1}`}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                            onError={(e) => {
+                              // Hide image if it fails to load
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
               </Box>
 
               {/* Contact Button */}
@@ -519,38 +622,44 @@ const PostDetail = () => {
                     },
                   }}
                 >
-                  <MenuItem onClick={handleEmailContact} sx={{ py: 1.5 }}>
-                    <ListItemIcon>
-                      <EmailIcon sx={{ color: '#667eea' }} />
-                    </ListItemIcon>
-                    <ListItemText 
-                      primary="Send Email" 
-                      secondary="Open mail app"
-                      secondaryTypographyProps={{ variant: 'caption' }}
-                    />
-                  </MenuItem>
+                  {post.contact_email && (
+                    <MenuItem onClick={handleEmailContact} sx={{ py: 1.5 }}>
+                      <ListItemIcon>
+                        <EmailIcon sx={{ color: '#667eea' }} />
+                      </ListItemIcon>
+                      <ListItemText 
+                        primary="Send Email" 
+                        secondary="Open mail app"
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                      />
+                    </MenuItem>
+                  )}
 
-                  <MenuItem onClick={handleSmsContact} sx={{ py: 1.5 }}>
-                    <ListItemIcon>
-                      <SmsIcon sx={{ color: '#10b981' }} />
-                    </ListItemIcon>
-                    <ListItemText 
-                      primary="Text Message" 
-                      secondary="Open SMS app"
-                      secondaryTypographyProps={{ variant: 'caption' }}
-                    />
-                  </MenuItem>
+                  {post.contact_phone && (
+                    <MenuItem onClick={handleSmsContact} sx={{ py: 1.5 }}>
+                      <ListItemIcon>
+                        <SmsIcon sx={{ color: '#10b981' }} />
+                      </ListItemIcon>
+                      <ListItemText 
+                        primary="Text Message" 
+                        secondary="Open SMS app"
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                      />
+                    </MenuItem>
+                  )}
 
-                  <MenuItem onClick={handleCopyEmail} sx={{ py: 1.5 }}>
-                    <ListItemIcon>
-                      <ContentCopyIcon sx={{ color: '#f59e0b' }} />
-                    </ListItemIcon>
-                    <ListItemText 
-                      primary="Copy Email" 
-                      secondary={post.email}
-                      secondaryTypographyProps={{ variant: 'caption' }}
-                    />
-                  </MenuItem>
+                  {post.contact_email && (
+                    <MenuItem onClick={handleCopyEmail} sx={{ py: 1.5 }}>
+                      <ListItemIcon>
+                        <ContentCopyIcon sx={{ color: '#f59e0b' }} />
+                      </ListItemIcon>
+                      <ListItemText 
+                        primary="Copy Email" 
+                        secondary={post.contact_email || ''}
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                      />
+                    </MenuItem>
+                  )}
 
                   <MenuItem onClick={handleCallContact} sx={{ py: 1.5 }}>
                     <ListItemIcon>
@@ -562,6 +671,15 @@ const PostDetail = () => {
                       secondaryTypographyProps={{ variant: 'caption' }}
                     />
                   </MenuItem>
+
+                  {post && (
+                    <MenuItem onClick={handleSiteMessage} sx={{ py:1.5 }}>
+                      <ListItemIcon>
+                        <MessageIcon sx={{ color:'#764ba2' }} />
+                      </ListItemIcon>
+                      <ListItemText primary="Message on TutorConnect" secondary="Open chat" secondaryTypographyProps={{variant:'caption'}} />
+                    </MenuItem>
+                  )}
                 </Menu>
               </Box>
             </Paper>

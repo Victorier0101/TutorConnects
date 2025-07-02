@@ -9,6 +9,8 @@ import Navbar from './components/Navbar';
 import PostDetail from './components/PostDetail';
 import Connect4 from './components/Connect4';
 import Connect4TwoPlayer from './components/Connect4TwoPlayer';
+import MessagesPage from './components/MessagesPage';
+import SettingsPage from './components/SettingsPage';
 
 const theme = createTheme({
   palette: {
@@ -143,6 +145,8 @@ function App() {
                 <Route path="/post/:id" element={<PostDetail />} />
                 <Route path="/connect4" element={<Connect4 />} />
                 <Route path="/connect4-2player" element={<Connect4TwoPlayer />} />
+                <Route path="/messages" element={<MessagesPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
               </Routes>
             </motion.div>
           </Router>

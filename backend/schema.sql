@@ -56,8 +56,13 @@ CREATE TABLE IF NOT EXISTS posts (
     subject VARCHAR(255) NOT NULL,
     level ENUM('elementary', 'middle', 'high', 'college', 'adult') NOT NULL,
     location VARCHAR(255) NOT NULL,
+    latitude DECIMAL(10, 8) NULL, -- Enhanced geocoding coordinates
+    longitude DECIMAL(11, 8) NULL,
+    location_confidence ENUM('high', 'medium', 'low') NULL,
+    location_source VARCHAR(50) NULL, -- nominatim, photon, mapbox, etc.
     format ENUM('online', 'in-person', 'both') NOT NULL,
     description TEXT NOT NULL,
+    image_urls JSON, -- Array of image URLs for this post
     is_active BOOLEAN DEFAULT TRUE,
     expires_at DATETIME NULL, -- Optional expiration date
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -68,6 +73,7 @@ CREATE TABLE IF NOT EXISTS posts (
     INDEX idx_post_type (post_type),
     INDEX idx_subject (subject),
     INDEX idx_level (level),
+    INDEX idx_location_coords (latitude, longitude), -- For geographic queries
     INDEX idx_created_at (created_at),
     INDEX idx_is_active (is_active)
 );

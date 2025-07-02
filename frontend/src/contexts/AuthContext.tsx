@@ -38,6 +38,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (profileData: Partial<UserProfile>) => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateAccount: (data: { name?: string; email?: string; password?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -162,6 +163,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const updateAccount = async (data: { name?: string; email?: string; password?: string }): Promise<void> => {
+    try {
+      await axios.put(`${API_BASE_URL}/api/user`, data);
+      await refreshUser();
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Account update failed');
+    }
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -171,6 +181,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     updateProfile,
     refreshUser,
+    updateAccount,
   };
 
   return (

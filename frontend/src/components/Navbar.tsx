@@ -35,6 +35,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoginDialog from './auth/LoginDialog';
 import RegisterDialog from './auth/RegisterDialog';
+import NotificationsPopover from './NotificationsPopover';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -43,6 +44,7 @@ const Navbar = () => {
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [notificationAnchor, setNotificationAnchor] = useState<null | HTMLElement>(null);
 
   const handleFindTutors = () => {
     // Check if we're not on the home page
@@ -230,6 +232,7 @@ const Navbar = () => {
                         background: 'rgba(255, 255, 255, 0.2)',
                       },
                     }}
+                    onClick={() => navigate('/messages')}
                   >
                     <Badge badgeContent={0} color="error">
                       <MessageIcon />
@@ -244,6 +247,7 @@ const Navbar = () => {
                         background: 'rgba(255, 255, 255, 0.2)',
                       },
                     }}
+                    onClick={(e) => setNotificationAnchor(e.currentTarget)}
                   >
                     <Badge badgeContent={0} color="error">
                       <NotificationsIcon />
@@ -432,7 +436,7 @@ const Navbar = () => {
               <ListItemText primary="Profile" />
             </MenuItem>
             <MenuItem 
-              onClick={handleUserMenuClose}
+              onClick={() => { handleUserMenuClose(); navigate('/settings'); }}
               sx={{ 
                 borderRadius: '8px', 
                 mx: 1,
@@ -481,6 +485,12 @@ const Navbar = () => {
         open={registerDialogOpen}
         onClose={() => setRegisterDialogOpen(false)}
         onSwitchToLogin={handleSwitchToLogin}
+      />
+
+      {/* Notifications Popover */}
+      <NotificationsPopover
+        anchorEl={notificationAnchor}
+        onClose={() => setNotificationAnchor(null)}
       />
     </>
   );

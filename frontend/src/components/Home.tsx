@@ -29,6 +29,8 @@ import {
   InputAdornment,
   ToggleButton,
   ToggleButtonGroup,
+  Autocomplete,
+  Fab,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -51,6 +53,9 @@ import {
   FilterList as FilterIcon,
   Login as LoginIcon,
   PersonAdd as PersonAddIcon,
+  Close as CloseIcon,
+  Message as MessageIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -61,6 +66,8 @@ import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../contexts/AuthContext';
 import LoginDialog from './auth/LoginDialog';
 import RegisterDialog from './auth/RegisterDialog';
+import useDebounce from '../hooks/useDebounce';
+import PostFormModal from './PostFormModal';
 
 interface Post {
   id: number;
@@ -78,15 +85,20 @@ interface Post {
   avatar_url?: string;
   rating?: number;
   total_reviews?: number;
+  contact_email?: string;
+  contact_phone?: string;
+  image_urls?: string[];
 }
 
 interface FormData {
   post_type: 'seeking' | 'offering';
-  subject: string;
+  subjects: string[];
   level: string;
   location: string;
   format: string;
   description: string;
+  contact_email: string;
+  contact_phone: string;
 }
 
 const Home = () => {
@@ -99,11 +111,13 @@ const Home = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [formData, setFormData] = useState<FormData>({
     post_type: 'seeking',
-    subject: '',
+    subjects: [],
     level: '',
     location: '',
     format: '',
     description: '',
+    contact_email: '',
+    contact_phone: '',
   });
 
   const [snackbar, setSnackbar] = useState({
@@ -119,6 +133,9 @@ const Home = () => {
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
 
+  // Post form modal state
+  const [postFormModalOpen, setPostFormModalOpen] = useState(false);
+
   // Contact menu state
   const [contactMenus, setContactMenus] = useState<{ [key: number]: HTMLElement | null }>({});
   const [contactSnackbar, setContactSnackbar] = useState({
@@ -127,8 +144,11 @@ const Home = () => {
   });
 
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [levelFilter, setLevelFilter] = useState('all');
   const [formatFilter, setFormatFilter] = useState('all');
+
+  const subjectOptions = ['Mathematics','Physics','Chemistry','Biology','English','History','Computer Science','Spanish','French','German'];
 
   const filterPosts = useCallback(() => {
     let filtered = posts;
@@ -149,8 +169,8 @@ const Home = () => {
     }
     
     // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+    if (debouncedSearchQuery.trim()) {
+      const query = debouncedSearchQuery.toLowerCase();
       filtered = filtered.filter(post => 
         post.subject.toLowerCase().includes(query) ||
         post.description.toLowerCase().includes(query) ||
@@ -162,31 +182,22 @@ const Home = () => {
     }
     
     setFilteredPosts(filtered);
-  }, [posts, filter, levelFilter, formatFilter, searchQuery]);
-
-  useEffect(() => {
-    console.log('📝 Posts state updated:', posts);
-    console.log('📝 Filtered posts:', filteredPosts);
-  }, [posts, filteredPosts]);
-
-  useEffect(() => {
-    fetchPosts();
-  }, []);
+  }, [posts, filter, levelFilter, formatFilter, debouncedSearchQuery]);
 
   useEffect(() => {
     filterPosts();
   }, [filterPosts]);
 
   const fetchPosts = async () => {
-    console.log('🔄 Fetching posts...');
+    // console.log('🔄 Fetching posts...');
     setLoading(true);
     try {
-      console.log('📡 Making API call to: http://localhost:3001/api/posts');
+      // console.log('📡 Making API call to: http://localhost:3001/api/posts');
       const response = await axios.get('http://localhost:3001/api/posts');
-      console.log('✅ API Response received:', response.data);
-      console.log('📊 Number of posts:', response.data.length);
+      // console.log('✅ API Response received:', response.data);
+      // console.log('📊 Number of posts:', response.data.length);
       setPosts(response.data);
-      console.log('🔄 Posts set in state');
+      // console.log('🔄 Posts set in state');
     } catch (error: any) {
       console.error('❌ Error fetching posts:', error);
       console.error('📍 Error details:', error.response?.data || error.message);
@@ -197,7 +208,7 @@ const Home = () => {
       });
     } finally {
       setLoading(false);
-      console.log('🏁 Fetch posts completed');
+      // console.log('🏁 Fetch posts completed');
     }
   };
 
@@ -234,7 +245,12 @@ const Home = () => {
     setSubmitLoading(true);
 
     try {
-      await axios.post('http://localhost:3001/api/posts', formData);
+      const payload = {
+        ...formData,
+        subject: formData.subjects.join(',')
+      } as any;
+      delete payload.subjects;
+      await axios.post('http://localhost:3001/api/posts', payload);
       
       setSnackbar({
         open: true,
@@ -245,11 +261,13 @@ const Home = () => {
       // Reset form
       setFormData({
         post_type: 'seeking',
-        subject: '',
+        subjects: [],
         level: '',
         location: '',
         format: '',
         description: '',
+        contact_email: '',
+        contact_phone: '',
       });
 
       // Refresh posts
@@ -327,79 +345,6 @@ const Home = () => {
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   });
 
-  // Custom hook to geocode locations (convert address to coordinates)
-  const useGeocoding = (posts: Post[]) => {
-    const [geocodedPosts, setGeocodedPosts] = useState<Post[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-      const geocodePosts = async () => {
-        // Filter out online posts since they don't need physical locations
-        const locationBasedPosts = posts.filter(post => 
-          post.format.toLowerCase() !== 'online'
-        );
-
-        const postsWithCoords = await Promise.all(
-          locationBasedPosts.map(async (post) => {
-            if (post.coordinates) return post;
-            
-            try {
-              // Using free Nominatim geocoding service (OpenStreetMap)
-              const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(post.location)}&limit=1`
-              );
-              const data = await response.json();
-              
-              if (data && data.length > 0) {
-                return {
-                  ...post,
-                  coordinates: [parseFloat(data[0].lat), parseFloat(data[0].lon)] as [number, number],
-                };
-              }
-            } catch (error) {
-              console.error('Geocoding error:', error);
-            }
-            
-            // Default to San Francisco if geocoding fails
-            return {
-              ...post,
-              coordinates: [37.7749, -122.4194] as [number, number],
-            };
-          })
-        );
-        
-        setGeocodedPosts(postsWithCoords);
-        setLoading(false);
-      };
-
-      if (posts.length > 0) {
-        geocodePosts();
-      } else {
-        setLoading(false);
-      }
-    }, [posts]);
-
-    return { geocodedPosts, loading };
-  };
-
-  // Custom markers for different post types
-  const createCustomIcon = (postType: 'seeking' | 'offering') => {
-    const color = postType === 'seeking' ? '#f59e0b' : '#10b981';
-    const svgIcon = `
-      <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="20" cy="20" r="18" fill="${color}" stroke="white" stroke-width="3"/>
-        <circle cx="20" cy="20" r="8" fill="white"/>
-      </svg>
-    `;
-    
-    return new Icon({
-      iconUrl: `data:image/svg+xml;base64,${btoa(svgIcon)}`,
-      iconSize: [40, 40],
-      iconAnchor: [20, 40],
-      popupAnchor: [0, -40],
-    });
-  };
-
   // Contact menu handlers
   const handleContactClick = (event: React.MouseEvent<HTMLElement>, postId: number) => {
     event.stopPropagation();
@@ -411,25 +356,29 @@ const Home = () => {
   };
 
   const handleEmailContact = (post: Post) => {
-    const mailtoLink = `mailto:${post.email}?subject=${encodeURIComponent(`Re: ${post.subject} Tutoring`)}&body=${encodeURIComponent(`Hi ${post.name},\n\nI'm interested in your ${post.subject} tutoring post. Let's discuss!\n\nBest regards`)}`;
+    if (!post.contact_email) {
+      setContactSnackbar({ open: true, message: 'Email not provided for this post.', });
+      return;
+    }
+    const mailtoLink = `mailto:${post.contact_email}?subject=${encodeURIComponent(`Re: ${post.subject} Tutoring`)}&body=${encodeURIComponent(`Hi ${post.name},\n\nI'm interested in your ${post.subject} tutoring post. Let's discuss!\n\nBest regards`)}`;
     window.location.href = mailtoLink;
     handleContactClose(post.id);
   };
 
   const handleSmsContact = (post: Post) => {
+    if (!post.contact_phone) {
+      setContactSnackbar({ open: true, message: 'Phone number not provided for this post.' });
+      return;
+    }
     const smsText = `Hi ${post.name}, I'm interested in your ${post.subject} tutoring post. Let's discuss!`;
-    const smsLink = `sms:?body=${encodeURIComponent(smsText)}`;
+    const smsLink = `sms:${post.contact_phone}?body=${encodeURIComponent(smsText)}`;
     window.location.href = smsLink;
     handleContactClose(post.id);
-    setContactSnackbar({
-      open: true,
-      message: 'SMS template copied. Add recipient phone number.',
-    });
   };
 
   const handleCopyEmail = async (post: Post) => {
     try {
-      await navigator.clipboard.writeText(post.email);
+      await navigator.clipboard.writeText(post.contact_email || '');
       setContactSnackbar({
         open: true,
         message: 'Email address copied to clipboard!',
@@ -437,7 +386,7 @@ const Home = () => {
     } catch (err) {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
-      textArea.value = post.email;
+      textArea.value = post.contact_email || '';
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand('copy');
@@ -458,6 +407,23 @@ const Home = () => {
     handleContactClose(post.id);
   };
 
+  const { token } = useAuth();
+
+  const handleSiteMessage = async (post: Post) => {
+    if (!user) { setLoginDialogOpen(true); return; }
+    try {
+      const res = await axios.post('http://localhost:3001/api/conversations', {
+        participant_id: post.user_id,
+        post_id: post.id,
+      });
+      navigate('/messages');
+    } catch (err) {
+      console.error('start conversation error', err);
+      setSnackbar({ open:true, message:'Could not start conversation', severity:'error' });
+    }
+    handleContactClose(post.id);
+  };
+
   // Check if any menu is open
   const isAnyMenuOpen = Object.values(contactMenus).some(menu => menu !== null);
 
@@ -469,6 +435,15 @@ const Home = () => {
     }
     navigate(`/post/${postId}`);
   };
+
+  // Debounce filtered posts for heavy children like MapComponent
+  const debouncedFilteredPosts = useDebounce(filteredPosts, 300);
+
+  // Initial load: fetch posts once on mount
+  useEffect(() => {
+    fetchPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -539,219 +514,8 @@ const Home = () => {
         </motion.div>
 
         <Box sx={{ display: 'flex', gap: 4, flexDirection: { xs: 'column', lg: 'row' } }}>
-          {/* Form Section */}
-          <Box sx={{ width: { xs: '100%', lg: '33.33%' } }}>
-            <motion.div variants={itemVariants}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 4,
-                  borderRadius: '24px',
-                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%)',
-                  backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  position: 'sticky',
-                  top: 20,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                  <Avatar
-                    sx={{
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      mr: 2,
-                      width: 48,
-                      height: 48,
-                    }}
-                  >
-                    <SchoolIcon />
-                  </Avatar>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    {user ? 'Post an Opportunity' : 'Join TutorConnect'}
-                  </Typography>
-                </Box>
-
-                {user ? (
-                  // Authenticated user form
-                  <form onSubmit={handleSubmit}>
-                    <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-                      <Button
-                        variant={formData.post_type === 'seeking' ? 'contained' : 'outlined'}
-                        onClick={() => setFormData(prev => ({ ...prev, post_type: 'seeking' }))}
-                        sx={{
-                          flex: 1,
-                          py: 1.5,
-                          borderRadius: '12px',
-                          ...(formData.post_type === 'seeking' && {
-                            background: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)',
-                          }),
-                        }}
-                      >
-                        Need Tutor
-                      </Button>
-                      <Button
-                        variant={formData.post_type === 'offering' ? 'contained' : 'outlined'}
-                        onClick={() => setFormData(prev => ({ ...prev, post_type: 'offering' }))}
-                        sx={{
-                          flex: 1,
-                          py: 1.5,
-                          borderRadius: '12px',
-                          ...(formData.post_type === 'offering' && {
-                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                          }),
-                        }}
-                      >
-                        Offer Services
-                      </Button>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <TextField
-                        fullWidth
-                        label="Subject"
-                        name="subject"
-                        value={formData.subject}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="e.g., Mathematics, Physics"
-                        InputProps={{
-                          startAdornment: <SchoolIcon sx={{ mr: 1, color: '#667eea' }} />,
-                        }}
-                      />
-                      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                        <FormControl fullWidth required>
-                          <InputLabel>Level</InputLabel>
-                          <Select
-                            name="level"
-                            value={formData.level}
-                            onChange={handleSelectChange}
-                            label="Level"
-                          >
-                            <MenuItem value="elementary">Elementary</MenuItem>
-                            <MenuItem value="middle">Middle School</MenuItem>
-                            <MenuItem value="high">High School</MenuItem>
-                            <MenuItem value="college">College</MenuItem>
-                            <MenuItem value="adult">Adult Education</MenuItem>
-                          </Select>
-                        </FormControl>
-                        <FormControl fullWidth required>
-                          <InputLabel>Format</InputLabel>
-                          <Select
-                            name="format"
-                            value={formData.format}
-                            onChange={handleSelectChange}
-                            label="Format"
-                          >
-                            <MenuItem value="In-person">In-person</MenuItem>
-                            <MenuItem value="Online">Online</MenuItem>
-                            <MenuItem value="Both">Both</MenuItem>
-                          </Select>
-                        </FormControl>
-                      </Box>
-                      <TextField
-                        fullWidth
-                        label="Location"
-                        name="location"
-                        value={formData.location}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="City, State or Online"
-                        InputProps={{
-                          startAdornment: <LocationIcon sx={{ mr: 1, color: '#667eea' }} />,
-                        }}
-                      />
-                      <TextField
-                        fullWidth
-                        label="Description"
-                        name="description"
-                        value={formData.description}
-                        onChange={handleInputChange}
-                        multiline
-                        rows={3}
-                        required
-                        placeholder="Tell us more about what you're looking for or offering..."
-                        InputProps={{
-                          startAdornment: <DescriptionIcon sx={{ mr: 1, color: '#667eea', alignSelf: 'flex-start', mt: 1 }} />,
-                        }}
-                      />
-                    </Box>
-
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      fullWidth
-                      size="large"
-                      disabled={submitLoading}
-                      startIcon={submitLoading ? null : <SendIcon />}
-                      sx={{
-                        mt: 3,
-                        py: 2,
-                        fontSize: '1.1rem',
-                        fontWeight: 600,
-                        borderRadius: '16px',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        '&:hover': {
-                          background: 'linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%)',
-                          transform: 'translateY(-2px)',
-                        },
-                        transition: 'all 0.3s ease',
-                      }}
-                    >
-                      {submitLoading ? 'Posting...' : 'Post Opportunity'}
-                    </Button>
-                  </form>
-                ) : (
-                  // Non-authenticated user prompt
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                      Sign in to post tutoring opportunities
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                      Join our community to find or offer tutoring services with spam protection and secure messaging.
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
-                      <Button
-                        variant="contained"
-                        startIcon={<LoginIcon />}
-                        onClick={() => setLoginDialogOpen(true)}
-                        sx={{
-                          px: 4,
-                          py: 1.5,
-                          borderRadius: '12px',
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                          '&:hover': {
-                            background: 'linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%)',
-                          },
-                        }}
-                      >
-                        Sign In
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        startIcon={<PersonAddIcon />}
-                        onClick={() => setRegisterDialogOpen(true)}
-                        sx={{
-                          px: 4,
-                          py: 1.5,
-                          borderRadius: '12px',
-                          borderColor: '#667eea',
-                          color: '#667eea',
-                          '&:hover': {
-                            borderColor: '#5a6fd8',
-                            backgroundColor: 'rgba(102, 126, 234, 0.04)',
-                          },
-                        }}
-                      >
-                        Sign Up
-                      </Button>
-                    </Box>
-                  </Box>
-                )}
-              </Paper>
-            </motion.div>
-          </Box>
-
-          {/* Posts Section */}
-          <Box sx={{ width: { xs: '100%', lg: '66.67%' } }} id="posts-section">
+          {/* Posts Section - Now Full Width */}
+          <Box sx={{ width: '100%' }} id="posts-section">
             <motion.div
               id="posts-section"
               initial={{ opacity: 0, y: 20 }}
@@ -1118,6 +882,7 @@ const Home = () => {
                                           },
                                         }}
                                       >
+                                        {post.contact_email && (
                                         <MenuItem onClick={() => handleEmailContact(post)} sx={{ py: 1 }}>
                                           <ListItemIcon>
                                             <EmailIcon sx={{ color: '#667eea', fontSize: 18 }} />
@@ -1127,7 +892,9 @@ const Home = () => {
                                             primaryTypographyProps={{ fontSize: '0.8rem' }}
                                           />
                                         </MenuItem>
+                                        )}
 
+                                        {post.contact_phone && (
                                         <MenuItem onClick={() => handleSmsContact(post)} sx={{ py: 1 }}>
                                           <ListItemIcon>
                                             <SmsIcon sx={{ color: '#10b981', fontSize: 18 }} />
@@ -1137,7 +904,9 @@ const Home = () => {
                                             primaryTypographyProps={{ fontSize: '0.8rem' }}
                                           />
                                         </MenuItem>
+                                        )}
 
+                                        {post.contact_email && (
                                         <MenuItem onClick={() => handleCopyEmail(post)} sx={{ py: 1 }}>
                                           <ListItemIcon>
                                             <ContentCopyIcon sx={{ color: '#f59e0b', fontSize: 18 }} />
@@ -1146,6 +915,14 @@ const Home = () => {
                                             primary="Copy Email" 
                                             primaryTypographyProps={{ fontSize: '0.8rem' }}
                                           />
+                                        </MenuItem>
+                                        )}
+
+                                        <MenuItem onClick={() => handleSiteMessage(post)} sx={{ py: 1 }}>
+                                          <ListItemIcon>
+                                            <MessageIcon sx={{ color: '#764ba2', fontSize: 18 }} />
+                                          </ListItemIcon>
+                                          <ListItemText primary="Message on TutorConnect" primaryTypographyProps={{fontSize:'0.8rem'}} />
                                         </MenuItem>
                                       </Menu>
                                     </Box>
@@ -1165,7 +942,7 @@ const Home = () => {
                           </Typography>
                         </Box>
                         <MapComponent 
-                          posts={filteredPosts} 
+                          posts={debouncedFilteredPosts} 
                           selectedPost={selectedPost}
                           onPostSelect={setSelectedPost}
                         />
@@ -1285,6 +1062,59 @@ const Home = () => {
                                     {post.description}
                                   </Typography>
 
+                                  {/* Post Images */}
+                                  {post.image_urls && post.image_urls.length > 0 && (
+                                    <Box sx={{ mb: 2 }}>
+                                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                        {post.image_urls.slice(0, 3).map((imageUrl, imageIndex) => (
+                                          <Box
+                                            key={imageIndex}
+                                            sx={{
+                                              width: 60,
+                                              height: 60,
+                                              borderRadius: '8px',
+                                              overflow: 'hidden',
+                                              position: 'relative',
+                                              border: '1px solid rgba(0,0,0,0.1)',
+                                            }}
+                                          >
+                                            <img
+                                              src={imageUrl}
+                                              alt={`Post image ${imageIndex + 1}`}
+                                              style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover',
+                                              }}
+                                              onError={(e) => {
+                                                // Hide image if it fails to load
+                                                e.currentTarget.style.display = 'none';
+                                              }}
+                                            />
+                                          </Box>
+                                        ))}
+                                        {post.image_urls.length > 3 && (
+                                          <Box
+                                            sx={{
+                                              width: 60,
+                                              height: 60,
+                                              borderRadius: '8px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              bgcolor: 'rgba(102, 126, 234, 0.1)',
+                                              border: '1px solid rgba(102, 126, 234, 0.2)',
+                                            }}
+                                          >
+                                            <Typography variant="caption" color="primary" sx={{ fontWeight: 600 }}>
+                                              +{post.image_urls.length - 3}
+                                            </Typography>
+                                          </Box>
+                                        )}
+                                      </Box>
+                                    </Box>
+                                  )}
+
                                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                                     Posted {new Date(post.created_at).toLocaleDateString()}
                                   </Typography>
@@ -1350,6 +1180,7 @@ const Home = () => {
                                         },
                                       }}
                                     >
+                                      {post.contact_email && (
                                       <MenuItem onClick={() => handleEmailContact(post)} sx={{ py: 1 }}>
                                         <ListItemIcon>
                                           <EmailIcon sx={{ color: '#667eea', fontSize: 18 }} />
@@ -1359,7 +1190,9 @@ const Home = () => {
                                           primaryTypographyProps={{ fontSize: '0.8rem' }}
                                         />
                                       </MenuItem>
+                                      )}
 
+                                      {post.contact_phone && (
                                       <MenuItem onClick={() => handleSmsContact(post)} sx={{ py: 1 }}>
                                         <ListItemIcon>
                                           <SmsIcon sx={{ color: '#10b981', fontSize: 18 }} />
@@ -1369,7 +1202,9 @@ const Home = () => {
                                           primaryTypographyProps={{ fontSize: '0.8rem' }}
                                         />
                                       </MenuItem>
+                                      )}
 
+                                      {post.contact_email && (
                                       <MenuItem onClick={() => handleCopyEmail(post)} sx={{ py: 1 }}>
                                         <ListItemIcon>
                                           <ContentCopyIcon sx={{ color: '#f59e0b', fontSize: 18 }} />
@@ -1378,6 +1213,14 @@ const Home = () => {
                                           primary="Copy Email" 
                                           primaryTypographyProps={{ fontSize: '0.8rem' }}
                                         />
+                                      </MenuItem>
+                                      )}
+
+                                      <MenuItem onClick={() => handleSiteMessage(post)} sx={{ py: 1 }}>
+                                        <ListItemIcon>
+                                          <MessageIcon sx={{ color: '#764ba2', fontSize: 18 }} />
+                                        </ListItemIcon>
+                                        <ListItemText primary="Message on TutorConnect" primaryTypographyProps={{fontSize:'0.8rem'}} />
                                       </MenuItem>
                                     </Menu>
                                   </Box>
@@ -1394,6 +1237,55 @@ const Home = () => {
             </motion.div>
           </Box>
         </Box>
+
+        {/* Floating Action Button for Creating Posts */}
+        <Fab
+          color="primary"
+          aria-label="add post"
+          onClick={() => {
+            if (!user) {
+              setLoginDialogOpen(true);
+              return;
+            }
+            setPostFormModalOpen(true);
+          }}
+          sx={{
+            position: 'fixed',
+            bottom: 32,
+            right: 32,
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%)',
+              transform: 'scale(1.1)',
+            },
+            transition: 'all 0.3s ease',
+            zIndex: 1000,
+            width: 64,
+            height: 64,
+          }}
+        >
+          <AddIcon sx={{ fontSize: 28 }} />
+        </Fab>
+
+        {/* Post Form Modal */}
+        <PostFormModal
+          open={postFormModalOpen}
+          onClose={() => setPostFormModalOpen(false)}
+          onPostCreated={fetchPosts}
+          setSnackbar={setSnackbar}
+        />
+
+        {/* Authentication Dialogs */}
+        <LoginDialog
+          open={loginDialogOpen}
+          onClose={() => setLoginDialogOpen(false)}
+          onSwitchToRegister={handleSwitchToRegister}
+        />
+        <RegisterDialog
+          open={registerDialogOpen}
+          onClose={() => setRegisterDialogOpen(false)}
+          onSwitchToLogin={handleSwitchToLogin}
+        />
       </motion.div>
 
       <Snackbar
@@ -1430,19 +1322,6 @@ const Home = () => {
           {contactSnackbar.message}
         </Alert>
       </Snackbar>
-
-      {/* Authentication Dialogs */}
-      <LoginDialog
-        open={loginDialogOpen}
-        onClose={() => setLoginDialogOpen(false)}
-        onSwitchToRegister={handleSwitchToRegister}
-      />
-      
-      <RegisterDialog
-        open={registerDialogOpen}
-        onClose={() => setRegisterDialogOpen(false)}
-        onSwitchToLogin={handleSwitchToLogin}
-      />
     </Container>
   );
 };
