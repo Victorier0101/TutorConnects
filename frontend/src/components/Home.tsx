@@ -68,6 +68,8 @@ import LoginDialog from './auth/LoginDialog';
 import RegisterDialog from './auth/RegisterDialog';
 import useDebounce from '../hooks/useDebounce';
 import PostFormModal from './PostFormModal';
+import LevelDisplay, { LevelData } from './shared/LevelDisplay';
+import FormatBadge from './shared/FormatBadge';
 
 interface Post {
   id: number;
@@ -88,6 +90,7 @@ interface Post {
   contact_email?: string;
   contact_phone?: string;
   image_urls?: string[];
+  levelData?: LevelData;
 }
 
 interface FormData {
@@ -813,8 +816,14 @@ const Home = () => {
                                       )}
                                     </Box>
                                     <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', mb: 1 }}>
-                                      {post.subject} - {post.level}
+                                      {post.subject}
                                     </Typography>
+                                    <LevelDisplay 
+                                      levelData={post.levelData} 
+                                      legacyLevel={post.level} 
+                                      size="small" 
+                                      variant="text" 
+                                    />
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                       <PersonIcon sx={{ fontSize: 16, color: '#10b981' }} />
                                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -1001,8 +1010,13 @@ const Home = () => {
                                 }}
                                 onClick={() => handleCardClick(post.id)}
                               >
-                                <CardContent sx={{ p: 3, pb: 1 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                                <CardContent sx={{ p: 3, pb: 1, position: 'relative' }}>
+                                  {/* Format Badge - Top Right */}
+                                  <Box sx={{ position: 'absolute', top: 12, right: 12 }}>
+                                    <FormatBadge format={post.format} size="small" />
+                                  </Box>
+
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, pr: 8 }}>
                                     <Avatar
                                       sx={{
                                         background: getAvatarColor(post.post_type),
@@ -1020,9 +1034,18 @@ const Home = () => {
                                         sx={{ fontWeight: 600, mb: 0.5 }}
                                       />
                                       <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: '1.1rem' }}>
-                                        {post.subject} - {post.level}
+                                        {post.subject}
                                       </Typography>
                                     </Box>
+                                  </Box>
+
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <LevelDisplay 
+                                      levelData={post.levelData} 
+                                      legacyLevel={post.level} 
+                                      size="small" 
+                                      variant="chip" 
+                                    />
                                   </Box>
 
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -1032,18 +1055,10 @@ const Home = () => {
                                     </Typography>
                                   </Box>
 
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                     <LocationIcon sx={{ fontSize: 16, color: '#667eea' }} />
                                     <Typography variant="body2" color="text.secondary">
                                       {post.location}
-                                    </Typography>
-                                  </Box>
-
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                                    <ScheduleIcon sx={{ fontSize: 16, color: '#667eea' }} />
-                                    <Typography variant="body2" color="text.secondary">
-                                      {post.format === 'online' ? 'Online' : 
-                                        post.format === 'in-person' ? 'In-Person' : 'Both Online & In-Person'}
                                     </Typography>
                                   </Box>
 

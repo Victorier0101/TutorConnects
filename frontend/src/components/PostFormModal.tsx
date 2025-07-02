@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -20,6 +20,10 @@ import {
   Divider,
   Alert,
   LinearProgress,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  CircularProgress,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -34,6 +38,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import LocationInput from './LocationInput';
+import LevelSelector, { LevelData } from './shared/LevelSelector';
 
 interface LocationData {
   address: string;
@@ -49,7 +54,7 @@ interface LocationData {
 interface FormData {
   post_type: 'seeking' | 'offering';
   subjects: string[];
-  level: string;
+  level: LevelData;
   location: string;
   locationData?: LocationData;
   format: string;
@@ -86,7 +91,7 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
   const [formData, setFormData] = useState<FormData>({
     post_type: 'seeking',
     subjects: [],
-    level: '',
+    level: { type: 'single', single: '' },
     location: '',
     locationData: undefined,
     format: '',
@@ -116,6 +121,13 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
     }));
   };
 
+  const handleLevelChange = (levelData: LevelData) => {
+    setFormData((prev) => ({
+      ...prev,
+      level: levelData,
+    }));
+  };
+
   const handleLocationChange = (value: string, locationData?: LocationData) => {
     setFormData((prev) => ({
       ...prev,
@@ -131,6 +143,19 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
         ...prev,
         locationData: locationData,
       }));
+    }
+  };
+
+  const isLevelValid = (level: LevelData): boolean => {
+    switch (level.type) {
+      case 'single':
+        return !!level.single;
+      case 'range':
+        return !!level.min && !!level.max;
+      case 'multiple':
+        return !!(level.multiple && level.multiple.length > 0);
+      default:
+        return false;
     }
   };
 
@@ -162,7 +187,7 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
       setFormData({
         post_type: 'seeking',
         subjects: [],
-        level: '',
+        level: { type: 'single', single: '' },
         location: '',
         locationData: undefined,
         format: '',
@@ -201,7 +226,7 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
       setFormData({
         post_type: 'seeking',
         subjects: [],
-        level: '',
+        level: { type: 'single', single: '' },
         location: '',
         locationData: undefined,
         format: '',
@@ -360,21 +385,12 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
 
             {/* Level and Format */}
             <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-              <FormControl fullWidth required>
-                <InputLabel>Level</InputLabel>
-                <Select
-                  name="level"
-                  value={formData.level}
-                  onChange={handleSelectChange}
-                  label="Level"
-                >
-                  <MenuItem value="elementary">Elementary</MenuItem>
-                  <MenuItem value="middle">Middle School</MenuItem>
-                  <MenuItem value="high">High School</MenuItem>
-                  <MenuItem value="college">College</MenuItem>
-                  <MenuItem value="adult">Adult Education</MenuItem>
-                </Select>
-              </FormControl>
+              <LevelSelector
+                value={formData.level}
+                onChange={handleLevelChange}
+                label="Education Level"
+                required
+              />
               
               <FormControl fullWidth required>
                 <InputLabel>Format</InputLabel>
@@ -470,7 +486,7 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
             disabled={
               submitLoading || 
               !formData.subjects.length || 
-              !formData.level || 
+              !isLevelValid(formData.level) || 
               !formData.format || 
               !formData.description
               // Temporarily disabled location validation for testing

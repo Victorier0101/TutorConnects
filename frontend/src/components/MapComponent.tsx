@@ -1,7 +1,7 @@
-import React, { useEffect, useState, memo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import React, { useEffect, useState, memo, useCallback, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { LatLngExpression, Icon } from 'leaflet';
-import { Box, Typography, Chip, IconButton, Fade, Paper, CircularProgress } from '@mui/material';
+import { Box, Typography, Chip, IconButton, Fade, Paper, CircularProgress, Button, Alert } from '@mui/material';
 import { 
   LocationOn as LocationIcon,
   Person as PersonIcon,
@@ -11,6 +11,8 @@ import { motion } from 'framer-motion';
 import 'leaflet/dist/leaflet.css';
 import TileLayerComponent from './shared/TileLayerComponent';
 import { parseCoordinates, getDefaultCoordinates } from './shared/coordinateUtils';
+import LevelDisplay, { LevelData } from './shared/LevelDisplay';
+import FormatBadge from './shared/FormatBadge';
 
 // Fix for default markers in react-leaflet
 delete (Icon.Default.prototype as any)._getIconUrl;
@@ -22,17 +24,25 @@ Icon.Default.mergeOptions({
 
 interface Post {
   id: number;
+  user_id?: number;
   post_type: 'seeking' | 'offering';
   name: string;
   email: string;
   subject: string;
   level: string;
   location: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
   format: string;
   description: string;
   created_at: string;
+  avatar_url?: string;
+  rating?: number;
+  total_reviews?: number;
+  contact_email?: string;
+  contact_phone?: string;
+  image_urls?: string[];
+  levelData?: LevelData;
 }
 
 interface MapComponentProps {
@@ -40,6 +50,12 @@ interface MapComponentProps {
   selectedPost?: Post | null;
   onPostSelect?: (post: Post) => void;
 }
+
+// Type for posts that have been validated to have numeric coordinates
+type ValidatedPost = Post & {
+  latitude: number;
+  longitude: number;
+};
 
 // Custom icon creation function
 const createCustomIcon = (postType: 'seeking' | 'offering') => {
@@ -60,10 +76,32 @@ const createCustomIcon = (postType: 'seeking' | 'offering') => {
   });
 };
 
+// Helper function to convert Post coordinates to CoordinateData format
+const getPostCoordinates = (post: Post): [number, number] | null => {
+  if (!post.latitude || !post.longitude) {
+    return null;
+  }
+
+  const lat = parseFloat(post.latitude as string);
+  const lng = parseFloat(post.longitude as string);
+
+  if (isNaN(lat) || isNaN(lng)) {
+    return null;
+  }
+
+  // Validate coordinate ranges
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    console.warn(`Invalid coordinates: lat=${lat}, lng=${lng}`);
+    return null;
+  }
+
+  return [lat, lng];
+};
+
 const MapComponent: React.FC<MapComponentProps> = ({ posts, selectedPost, onPostSelect }) => {
   const [loading, setLoading] = useState(true);
   const [mapCenter, setMapCenter] = useState<LatLngExpression>([43.6532, -79.3832]); // Default to Toronto
-  const [validPosts, setValidPosts] = useState<Post[]>([]);
+  const [validPosts, setValidPosts] = useState<ValidatedPost[]>([]);
   const [mapZoom, setMapZoom] = useState(10);
 
   // World boundaries to prevent dragging into gray space
@@ -76,9 +114,9 @@ const MapComponent: React.FC<MapComponentProps> = ({ posts, selectedPost, onPost
     console.log('📍 Processing posts for map:', posts.length);
     
     // Filter posts that have valid coordinates and are location-based
-    const postsWithCoordinates = posts.filter(post => {
-      // Convert string coordinates to numbers using shared utility
-      const coords = parseCoordinates(post);
+    const postsWithCoordinates: ValidatedPost[] = posts.filter(post => {
+      // Convert string coordinates to numbers using our helper
+      const coords = getPostCoordinates(post);
       const isLocationBased = post.format.toLowerCase() !== 'online';
       
       const isValid = coords !== null && isLocationBased;
@@ -91,13 +129,13 @@ const MapComponent: React.FC<MapComponentProps> = ({ posts, selectedPost, onPost
       
       return isValid;
     }).map(post => {
-      const coords = parseCoordinates(post)!; // We know it's valid from the filter above
+      const coords = getPostCoordinates(post)!; // We know it's valid from the filter above
       return {
         ...post,
         // Ensure coordinates are numbers
         latitude: coords[0],
         longitude: coords[1]
-      };
+      } as ValidatedPost;
     });
 
     console.log(`📍 Valid posts for map: ${postsWithCoordinates.length}/${posts.length}`);
@@ -113,7 +151,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ posts, selectedPost, onPost
       
       // Ensure center coordinates are valid numbers
       if (!isNaN(avgLat) && !isNaN(avgLng)) {
-        setMapCenter([avgLat, avgLng]);
+      setMapCenter([avgLat, avgLng]);
         console.log(`📍 Map center set to: [${avgLat}, ${avgLng}]`);
         
         // Set zoom level based on number of posts and their spread
@@ -223,8 +261,19 @@ const MapComponent: React.FC<MapComponentProps> = ({ posts, selectedPost, onPost
                     </Box>
                     
                     <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                      {post.subject} - {post.level}
+                      {post.subject}
                     </Typography>
+                    
+                    <LevelDisplay 
+                      levelData={post.levelData} 
+                      legacyLevel={post.level} 
+                      size="small" 
+                      variant="chip" 
+                    />
+                    
+                    <Box sx={{ mt: 1, mb: 0.5 }}>
+                      <FormatBadge format={post.format} size="small" />
+                    </Box>
                     
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                       <PersonIcon sx={{ fontSize: 16, color: '#667eea' }} />

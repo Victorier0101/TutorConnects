@@ -314,7 +314,7 @@ app.post('/api/auth/login', async (req, res) => {
     const profiles = await query('SELECT * FROM user_profiles WHERE user_id = ?', [user.id]);
     const profile = profiles[0] || {};
 
-    res.json({ 
+    res.json({
       message: 'Login successful',
       user: {
         id: user.id,
@@ -378,8 +378,8 @@ app.post('/api/upload/image', authenticateToken, upload.single('image'), (req, r
 
     // Get the file URL
     const fileUrl = `${req.protocol}://${req.get('host')}/uploads/images/${req.file.filename}`;
-    
-    res.json({ 
+
+    res.json({
       url: fileUrl,
       filename: req.file.filename,
       originalName: req.file.originalname,
@@ -413,11 +413,42 @@ app.get('/api/posts', async (req, res) => {
       ORDER BY p.created_at DESC
     `);
 
-    // Parse JSON fields for each post
-    const processedPosts = posts.map(post => ({
-      ...post,
-      image_urls: post.image_urls ? JSON.parse(post.image_urls) : []
-    }));
+    // Parse JSON fields for each post and reconstruct level data
+    const processedPosts = posts.map(post => {
+      // Reconstruct level data from flexible structure
+      let levelData = { type: 'single', single: post.level }; // Default fallback
+      
+      if (post.level_type) {
+        switch (post.level_type) {
+          case 'single':
+            levelData = { type: 'single', single: post.level_min };
+            break;
+          case 'range':
+            levelData = { type: 'range', min: post.level_min, max: post.level_max };
+            break;
+          case 'multiple':
+            levelData = { 
+              type: 'multiple', 
+              multiple: (() => {
+                const parsed = safeJsonParse(post.level_list);
+                if (parsed && Array.isArray(parsed)) return parsed;
+                // Fallback: if level_list is a plain string (e.g., 'elementary'), wrap it in array
+                if (post.level_list) return [post.level_list];
+                return [];
+              })() 
+            };
+            break;
+          default:
+            levelData = { type: 'single', single: post.level };
+        }
+      }
+
+      return {
+        ...post,
+        levelData, // New flexible level structure
+        image_urls: post.image_urls ? JSON.parse(post.image_urls) : []
+      };
+    });
 
     res.json(processedPosts);
   } catch (error) {
@@ -457,10 +488,41 @@ app.get('/api/posts/filter/:type', async (req, res) => {
     `, params);
 
     // Parse JSON fields for each post
-    const processedPosts = posts.map(post => ({
-      ...post,
-      image_urls: post.image_urls ? JSON.parse(post.image_urls) : []
-    }));
+    const processedPosts = posts.map(post => {
+      // Reconstruct level data from flexible structure
+      let levelData = { type: 'single', single: post.level }; // Default fallback
+      
+      if (post.level_type) {
+        switch (post.level_type) {
+          case 'single':
+            levelData = { type: 'single', single: post.level_min };
+            break;
+          case 'range':
+            levelData = { type: 'range', min: post.level_min, max: post.level_max };
+            break;
+          case 'multiple':
+            levelData = { 
+              type: 'multiple', 
+              multiple: (() => {
+                const parsed = safeJsonParse(post.level_list);
+                if (parsed && Array.isArray(parsed)) return parsed;
+                // Fallback: if level_list is a plain string (e.g., 'elementary'), wrap it in array
+                if (post.level_list) return [post.level_list];
+                return [];
+              })() 
+            };
+            break;
+          default:
+            levelData = { type: 'single', single: post.level };
+        }
+      }
+
+      return {
+        ...post,
+        levelData, // New flexible level structure
+        image_urls: post.image_urls ? JSON.parse(post.image_urls) : []
+      };
+    });
 
     res.json(processedPosts);
   } catch (error) {
@@ -503,6 +565,36 @@ app.get('/api/posts/:id', async (req, res) => {
       image_urls: posts[0].image_urls ? JSON.parse(posts[0].image_urls) : []
     };
 
+    // Reconstruct level data from flexible structure
+    let levelData = { type: 'single', single: post.level }; // Default fallback
+    
+    if (post.level_type) {
+      switch (post.level_type) {
+        case 'single':
+          levelData = { type: 'single', single: post.level_min };
+          break;
+        case 'range':
+          levelData = { type: 'range', min: post.level_min, max: post.level_max };
+          break;
+        case 'multiple':
+          levelData = { 
+            type: 'multiple', 
+            multiple: (() => {
+              const parsed = safeJsonParse(post.level_list);
+              if (parsed && Array.isArray(parsed)) return parsed;
+              // Fallback: if level_list is a plain string (e.g., 'elementary'), wrap it in array
+              if (post.level_list) return [post.level_list];
+              return [];
+            })() 
+          };
+          break;
+        default:
+          levelData = { type: 'single', single: post.level };
+      }
+    }
+
+    post.levelData = levelData;
+
     res.json(post);
   } catch (error) {
     console.error('Error fetching post:', error);
@@ -541,6 +633,38 @@ app.post('/api/posts', authenticateToken, checkPostLimits, async (req, res) => {
       return res.status(400).json({ error: 'Required fields missing' });
     }
 
+    // Process flexible level data
+    let levelType = 'single';
+    let levelMin = null;
+    let levelMax = null;
+    let levelList = null;
+    let legacyLevel = null;
+
+    if (typeof level === 'object' && level.type) {
+      levelType = level.type;
+      switch (level.type) {
+        case 'single':
+          levelMin = level.single;
+          levelMax = level.single;
+          legacyLevel = mapToLegacyCategory(level.single);
+          break;
+        case 'range':
+          levelMin = level.min;
+          levelMax = level.max;
+          legacyLevel = mapToLegacyCategory(level.min);
+          break;
+        case 'multiple':
+          levelList = JSON.stringify(level.multiple);
+          legacyLevel = mapToLegacyCategory(level.multiple[0]);
+          break;
+      }
+    } else {
+      // Handle legacy level format (string)
+      legacyLevel = mapToLegacyCategory(level);
+      levelMin = level;
+      levelMax = level;
+    }
+
     // Validate and process image URLs
     let processedImageUrls = null;
     if (image_urls && Array.isArray(image_urls) && image_urls.length > 0) {
@@ -551,14 +675,22 @@ app.post('/api/posts', authenticateToken, checkPostLimits, async (req, res) => {
       }
     }
 
-    // Create post with enhanced location data
+    // Create post with enhanced location data and flexible level structure
     const result = await query(
-      'INSERT INTO posts (user_id, post_type, subject, level, location, latitude, longitude, location_confidence, location_source, format, description, image_urls, contact_email, contact_phone, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      `INSERT INTO posts (
+        user_id, post_type, subject, level, level_type, level_min, level_max, level_list,
+        location, latitude, longitude, location_confidence, location_source, 
+        format, description, image_urls, contact_email, contact_phone, expires_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id, 
         post_type, 
         subject, 
-        level, 
+        legacyLevel, // Keep legacy level for backward compatibility
+        levelType,
+        levelMin,
+        levelMax,
+        levelList,
         location || 'Online', 
         latitude || null,
         longitude || null,
@@ -1069,19 +1201,19 @@ async function tryNominatim(location) {
       `format=json&q=${encodeURIComponent(location)}&limit=5&` +
       `countrycodes=ca,us&accept-language=en&addressdetails=1&` +
       `bounded=0&dedupe=1`,
-      {
-        headers: {
-          'User-Agent': 'TutorConnect/1.0 (contact@tutorconnect.com)',
-        },
+        {
+          headers: {
+            'User-Agent': 'TutorConnect/1.0 (contact@tutorconnect.com)',
+          },
         signal: controller.signal
-      }
-    );
+        }
+      );
 
     clearTimeout(timeoutId);
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     
-    const data = await response.json();
+        const data = await response.json();
     if (!data || data.length === 0) return null;
 
     // Find best match based on location type and importance
@@ -1097,7 +1229,7 @@ async function tryNominatim(location) {
       city: bestResult.address?.city || bestResult.address?.town || bestResult.address?.village || '',
       state: bestResult.address?.state || bestResult.address?.province || '',
     };
-  } catch (error) {
+    } catch (error) {
     clearTimeout(timeoutId);
     throw error;
   }
@@ -1322,6 +1454,38 @@ function generateLocationSuggestions(location) {
   }
 
   return suggestions;
+}
+
+// Helper to safely parse JSON strings
+function safeJsonParse(str) {
+  if (!str || typeof str !== 'string') return null;
+  try {
+    return JSON.parse(str);
+  } catch (err) {
+    // If the string isn't valid JSON but contains commas, split into array
+    if (str.includes(',')) {
+      return str.split(',').map(s => s.trim());
+    }
+    return null;
+  }
+}
+
+// Helper to map any level string to legacy enum
+function mapToLegacyCategory(levelStr) {
+  if (!levelStr) return 'elementary';
+  const gradeMatch = levelStr.match(/^grade-(\d+)$/);
+  if (gradeMatch) {
+    const gradeNum = parseInt(gradeMatch[1], 10);
+    if (gradeNum <= 5) return 'elementary';
+    if (gradeNum <= 8) return 'middle';
+    if (gradeNum <= 12) return 'high';
+  }
+  if (levelStr === 'grade-k') return 'elementary';
+  if (['elementary','middle','high','college','adult'].includes(levelStr)) return levelStr;
+  if (levelStr === 'college') return 'college';
+  if (levelStr === 'adult') return 'adult';
+  // default
+  return 'elementary';
 }
 
 const PORT = process.env.PORT || 3001;
