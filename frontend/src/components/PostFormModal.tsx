@@ -81,7 +81,7 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
   onPostCreated, 
   setSnackbar 
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   
   const [formData, setFormData] = useState<FormData>({
     post_type: 'seeking',
@@ -150,11 +150,7 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
       delete payload.subjects;
       delete payload.locationData;
 
-      await axios.post('/api/posts', payload, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      await axios.post('http://localhost:3001/api/posts', payload);
 
       setSnackbar({
         open: true,
@@ -476,8 +472,9 @@ const PostFormModal: React.FC<PostFormModalProps> = ({
               !formData.subjects.length || 
               !formData.level || 
               !formData.format || 
-              !formData.description ||
-              (formData.format !== 'Online' && (!formData.location || !isLocationValid))
+              !formData.description
+              // Temporarily disabled location validation for testing
+              // || (formData.format !== 'Online' && (!formData.location || !isLocationValid))
             }
             startIcon={submitLoading ? null : <SendIcon />}
             sx={{

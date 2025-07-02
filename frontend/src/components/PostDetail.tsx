@@ -42,6 +42,8 @@ import axios from 'axios';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { LatLngExpression, Icon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import TileLayerComponent from './shared/TileLayerComponent';
+import { parseCoordinates, getDefaultCoordinates } from './shared/coordinateUtils';
 
 // Fix for default markers in react-leaflet
 delete (Icon.Default.prototype as any)._getIconUrl;
@@ -61,6 +63,8 @@ interface Post {
   subject: string;
   level: string;
   location: string;
+  latitude?: string | number;
+  longitude?: string | number;
   format: string;
   description: string;
   image_urls?: string[];
@@ -91,6 +95,16 @@ const PostDetail = () => {
 
   useEffect(() => {
     if (post && post.format.toLowerCase() !== 'online') {
+      // First check if we have stored coordinates
+      const coords = parseCoordinates(post);
+      if (coords) {
+        console.log(`📍 PostDetail: Using stored coordinates for ${post.location}: [${coords[0]}, ${coords[1]}]`);
+        setCoordinates(coords);
+        return;
+      }
+      
+      // Fallback to geocoding if no stored coordinates
+      console.log(`📍 PostDetail: No stored coordinates for ${post.location}, geocoding...`);
       geocodeLocation(post.location);
     }
   }, [post]);
@@ -155,12 +169,12 @@ const PostDetail = () => {
       } else {
         console.log(`📍 PostDetail: No results found for ${location}`);
         // Set a default coordinate so map still shows something
-        setCoordinates([37.7749, -122.4194]); // San Francisco default
+        setCoordinates(getDefaultCoordinates());
       }
     } catch (error) {
       console.error(`📍 PostDetail: Geocoding error for ${location}:`, error);
       // Set a default coordinate so map still shows something
-      setCoordinates([37.7749, -122.4194]); // San Francisco default
+      setCoordinates(getDefaultCoordinates());
     } finally {
       setMapLoading(false);
     }
@@ -733,10 +747,7 @@ const PostDetail = () => {
                       maxZoom={18}
                       worldCopyJump={false}
                     >
-                      <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
+                      <TileLayerComponent />
                       
                       {/* Location Circle */}
                       <Circle
